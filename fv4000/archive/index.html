@@ -29,47 +29,38 @@ h1{font-size:18px;font-weight:500;margin-bottom:4px}
 .swatch{width:10px;height:10px;border-radius:2px;display:inline-block}
 .status{font-size:12px;color:#27AE60;margin-top:10px;min-height:16px}
 .footer{font-size:11px;color:#aaa;margin-top:18px;border-top:0.5px solid #eee;padding-top:12px}
-.loading{text-align:center;padding:40px;color:#999;font-size:13px}
 </style>
 </head>
 <body>
 <div class="card">
   <h1>FV4000 Laser Power Tracker — Irchel</h1>
-  <p class="subtitle">Daily mean per laser line. Toggle between % of nominal and absolute counts. Upload new CSV exports to temporarily extend the timeline in your browser.</p>
+  <p class="subtitle">Daily mean per laser line (% of nominal). Upload new CSV exports to extend the timeline. Use "both checked" export from the software for the full LPM log.</p>
 
-  <div style="display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap">
-    <label class="upload-zone" for="csvRatio" style="flex:1;min-width:220px">
-      <span style="font-size:20px;color:#888">&#8679;</span>
-      <div><div class="zone-title" id="lblRatio">Upload ratio CSV</div><div class="zone-hint">% of nominal power</div></div>
-    </label>
-    <label class="upload-zone" for="csvAbs" style="flex:1;min-width:220px">
-      <span style="font-size:20px;color:#888">&#8679;</span>
-      <div><div class="zone-title" id="lblAbs">Upload absolute CSV</div><div class="zone-hint">Raw detector counts</div></div>
-    </label>
-  </div>
-  <input type="file" id="csvRatio" accept=".csv" style="display:none">
-  <input type="file" id="csvAbs" accept=".csv" style="display:none">
+  <label class="upload-zone" for="csvInput">
+    <span style="font-size:20px;color:#888">&#8679;</span>
+    <div>
+      <div class="zone-title" id="uploadLabel">Upload CSV to update</div>
+      <div class="zone-hint">Export with Power check + Power correction both checked — ratio format</div>
+    </div>
+  </label>
+  <input type="file" id="csvInput" accept=".csv" style="display:none">
 
   <div class="controls">
-    <button class="mode-btn active" id="btnRatio" onclick="setMode('ratio')">% of nominal</button>
-    <button class="mode-btn" id="btnAbs" onclick="setMode('abs')">Absolute counts</button>
-    <div class="sep"></div>
     <div id="toggleRow" style="display:flex;flex-wrap:wrap;gap:6px"></div>
   </div>
 
   <div class="chart-wrap">
-    <div class="loading" id="loading">Loading data…</div>
-    <canvas id="laserChart" role="img" aria-label="Line chart of all FV4000 laser lines over time with incident zones marked." style="display:none">All laser lines shown over time. Critical drop after 20 May misalignment, recovery from 27 May.</canvas>
+    <canvas id="laserChart" role="img" aria-label="Line chart of all FV4000 laser lines over time with incident zones marked.">All laser lines shown over time. Critical drop after 20 May misalignment, recovery from 27 May.</canvas>
   </div>
 
   <div class="legend-row">
-    <div class="legend-item"><span class="swatch" style="background:#FFF2CC;border:0.5px solid #B8860B"></span>First realignment 20 May 2026 (partial)</div>
+    <div class="legend-item"><span class="swatch" style="background:#FFF2CC;border:0.5px solid #B8860B"></span>First realignment 20 May (partial)</div>
     <div class="legend-item"><span class="swatch" style="background:#FFE0E0;border:0.5px solid #C0392B"></span>Critical drop — LPM out of range</div>
-    <div class="legend-item"><span class="swatch" style="background:#E2EFDA;border:0.5px solid #27AE60"></span>Recovery from 27 May 2026</div>
+    <div class="legend-item"><span class="swatch" style="background:#E2EFDA;border:0.5px solid #27AE60"></span>Recovery from 27 May</div>
   </div>
 
   <div class="status" id="statusMsg"></div>
-  <div class="footer">FV4000 Laser Power Monitor log &nbsp;·&nbsp; Irchel Core Facility &nbsp;·&nbsp; Last updated: <span id="lastUpdated">loading…</span></div>
+  <div class="footer">FV4000 Laser Power Monitor log &nbsp;·&nbsp; Irchel Core Facility &nbsp;·&nbsp; Last updated: <span id="lastUpdated">built-in data (Mar–May 2026)</span></div>
 </div>
 
 <script>
@@ -85,30 +76,11 @@ const LASERS=[
   {key:'785',color:'#6B7280',dash:[]},
 ];
 
-let dataRatio = {};
-let dataAbs = {};
-let mode = 'ratio';
+const BUILTIN=[{"date":"2026-03-31","405":60.4,"445":80.4,"488":51.4,"561":122.6,"594":87.5,"640":96.2,"685":83.3,"730":86.9,"785":84.5},{"date":"2026-04-01","405":61.8,"445":null,"488":53.6,"561":122.8,"594":null,"640":97.3,"685":null,"730":86.4,"785":86.4},{"date":"2026-04-02","405":63.9,"445":null,"488":51.7,"561":123.3,"594":null,"640":97.8,"685":null,"730":null,"785":null},{"date":"2026-04-07","405":61.7,"445":null,"488":54.2,"561":119.8,"594":null,"640":null,"685":null,"730":null,"785":null},{"date":"2026-04-13","405":56.3,"445":null,"488":54.7,"561":118.0,"594":null,"640":96.5,"685":null,"730":90.2,"785":null},{"date":"2026-04-14","405":59.9,"445":null,"488":53.7,"561":118.0,"594":null,"640":95.0,"685":null,"730":90.0,"785":null},{"date":"2026-04-15","405":56.8,"445":null,"488":55.9,"561":121.3,"594":null,"640":97.5,"685":null,"730":null,"785":null},{"date":"2026-04-16","405":62.0,"445":null,"488":55.3,"561":118.1,"594":null,"640":93.2,"685":null,"730":null,"785":null},{"date":"2026-04-17","405":57.6,"445":null,"488":54.9,"561":118.3,"594":null,"640":94.6,"685":null,"730":91.3,"785":null},{"date":"2026-04-20","405":60.8,"445":null,"488":55.2,"561":123.5,"594":null,"640":91.8,"685":null,"730":null,"785":null},{"date":"2026-04-21","405":61.6,"445":null,"488":54.4,"561":120.7,"594":null,"640":96.1,"685":null,"730":null,"785":null},{"date":"2026-04-22","405":62.9,"445":null,"488":54.6,"561":121.0,"594":null,"640":null,"685":null,"730":null,"785":null},{"date":"2026-04-23","405":60.7,"445":null,"488":54.1,"561":122.0,"594":null,"640":98.0,"685":null,"730":89.6,"785":null},{"date":"2026-04-24","405":null,"445":null,"488":null,"561":122.2,"594":null,"640":96.5,"685":null,"730":null,"785":null},{"date":"2026-04-27","405":62.7,"445":null,"488":54.8,"561":121.7,"594":null,"640":98.4,"685":null,"730":89.3,"785":null},{"date":"2026-04-28","405":63.7,"445":null,"488":56.7,"561":119.1,"594":null,"640":96.4,"685":null,"730":90.2,"785":null},{"date":"2026-04-29","405":57.6,"445":null,"488":55.6,"561":119.8,"594":null,"640":97.8,"685":null,"730":89.2,"785":null},{"date":"2026-04-30","405":58.8,"445":null,"488":52.8,"561":123.0,"594":null,"640":94.3,"685":null,"730":86.7,"785":null},{"date":"2026-05-04","405":61.7,"445":null,"488":null,"561":null,"594":null,"640":null,"685":null,"730":null,"785":null},{"date":"2026-05-05","405":null,"445":null,"488":null,"561":119.6,"594":null,"640":94.7,"685":null,"730":null,"785":null},{"date":"2026-05-08","405":58.7,"445":null,"488":53.8,"561":118.4,"594":null,"640":94.3,"685":null,"730":null,"785":null},{"date":"2026-05-12","405":64.4,"445":null,"488":53.8,"561":123.5,"594":null,"640":null,"685":null,"730":null,"785":null},{"date":"2026-05-13","405":60.2,"445":null,"488":56.5,"561":120.8,"594":null,"640":98.3,"685":null,"730":89.3,"785":null},{"date":"2026-05-15","405":61.2,"445":null,"488":55.7,"561":119.6,"594":null,"640":97.6,"685":null,"730":null,"785":null},{"date":"2026-05-18","405":61.6,"445":null,"488":56.4,"561":117.3,"594":null,"640":null,"685":null,"730":null,"785":null},{"date":"2026-05-19","405":54.5,"445":null,"488":53.9,"561":118.8,"594":null,"640":95.5,"685":null,"730":null,"785":null},{"date":"2026-05-20","405":80.3,"445":84.4,"488":90.1,"561":135.2,"594":92.0,"640":95.6,"685":84.8,"730":91.3,"785":87.7},{"date":"2026-05-22","405":9.7,"445":null,"488":19.0,"561":null,"594":null,"640":26.4,"685":null,"730":null,"785":null},{"date":"2026-05-25","405":null,"445":null,"488":null,"561":34.0,"594":null,"640":27.3,"685":null,"730":null,"785":null},{"date":"2026-05-26","405":9.9,"445":null,"488":18.2,"561":33.5,"594":null,"640":27.2,"685":null,"730":null,"785":null},{"date":"2026-05-27","405":60.3,"445":51.3,"488":63.6,"561":37.7,"594":65.2,"640":33.0,"685":95.5,"730":96.1,"785":94.9},{"date":"2026-05-28","405":81.0,"445":null,"488":88.8,"561":111.5,"594":null,"640":82.0,"685":null,"730":null,"785":null},{"date":"2026-05-29","405":81.6,"445":83.7,"488":89.9,"561":112.3,"594":92.1,"640":83.5,"685":94.7,"730":96.2,"785":95.3}];
+
+let currentData = Object.fromEntries(BUILTIN.map(r=>{ const {date,...v}=r; return [date,v]; }));
 let activeKeys = new Set(LASERS.map(l=>l.key));
 let chart = null;
-
-async function loadInitialData() {
-  try {
-    const resp = await fetch('./data.json?t=' + Date.now());  // bust cache
-    if (!resp.ok) throw new Error('HTTP ' + resp.status);
-    const json = await resp.json();
-    dataRatio = json.ratio || {};
-    dataAbs = json.abs || {};
-    document.getElementById('lastUpdated').textContent = json.updated || 'unknown';
-  } catch (err) {
-    document.getElementById('lastUpdated').textContent = 'data.json not found';
-    document.getElementById('statusMsg').textContent = 'Could not load data.json — upload a CSV to view data.';
-    document.getElementById('statusMsg').style.color = '#C0392B';
-  }
-  document.getElementById('loading').style.display = 'none';
-  document.getElementById('laserChart').style.display = 'block';
-  buildToggles();
-  buildChart();
-}
 
 function parseCSV(text) {
   const result = Papa.parse(text.trim(),{header:true,skipEmptyLines:true,dynamicTyping:true});
@@ -143,25 +115,9 @@ function mergeData(existing, incoming) {
   return merged;
 }
 
-function getActiveData() { return mode==='ratio'?dataRatio:dataAbs; }
-
-function getYConfig() {
-  if(mode==='ratio') return {min:0,max:150,title:'% of nominal power'};
-  const vals=Object.values(getActiveData()).flatMap(d=>LASERS.filter(l=>activeKeys.has(l.key)).map(l=>d[l.key]).filter(v=>v!=null));
-  if (!vals.length) return {min:0,max:100000,title:'Detector counts'};
-  const mx=Math.max(...vals)*1.1;
-  return {min:0,max:Math.ceil(mx/1000)*1000||100000,title:'Detector counts'};
-}
-
 function buildChart() {
-  const data=getActiveData();
-  const days=Object.keys(data).sort();
-  if (!days.length) {
-    if (chart) { chart.destroy(); chart=null; }
-    return;
-  }
+  const days=Object.keys(currentData).sort();
   const labels=days.map(d=>d.slice(5));
-  const yc=getYConfig();
   const keyDates=['2026-05-20','2026-05-22','2026-05-25','2026-05-26','2026-05-27'];
 
   const bgPlugin={id:'bgZ',beforeDatasetsDraw(ch){
@@ -189,7 +145,7 @@ function buildChart() {
 
   const datasets=LASERS.filter(l=>activeKeys.has(l.key)).map(l=>({
     label:l.key+' nm',
-    data:days.map(d=>{ const v=data[d]?.[l.key]; return v!=null?parseFloat(v.toFixed(1)):null; }),
+    data:days.map(d=>{ const v=currentData[d]?.[l.key]; return v!=null?v:null; }),
     borderColor:l.color, backgroundColor:l.color+'18', borderWidth:1.8, borderDash:l.dash,
     pointRadius:days.map(d=>keyDates.includes(d)?5:2),
     pointBackgroundColor:days.map(d=>keyDates.includes(d)?(d==='2026-05-27'?'#27AE60':d==='2026-05-20'?'#D4A000':'#C0392B'):l.color),
@@ -206,12 +162,12 @@ function buildChart() {
         legend:{display:false},
         tooltip:{callbacks:{
           title:ctx=>days[ctx[0].dataIndex],
-          label:ctx=>`${ctx.dataset.label}: ${ctx.parsed.y!=null?ctx.parsed.y.toFixed(1)+(mode==='ratio'?' %':' counts'):'n/a'}`
+          label:ctx=>`${ctx.dataset.label}: ${ctx.parsed.y!=null?ctx.parsed.y.toFixed(1)+' %':'n/a'}`
         }}
       },
       scales:{
         x:{ticks:{maxTicksLimit:14,maxRotation:45,font:{size:10}},grid:{color:'rgba(0,0,0,0.05)'}},
-        y:{min:yc.min,max:yc.max,title:{display:true,text:yc.title,font:{size:11}},grid:{color:'rgba(0,0,0,0.05)'},ticks:{font:{size:10}}}
+        y:{min:0,max:150,title:{display:true,text:'% of nominal power',font:{size:11}},grid:{color:'rgba(0,0,0,0.05)'},ticks:{font:{size:10}}}
       }
     }
   });
@@ -233,34 +189,24 @@ function buildToggles() {
   });
 }
 
-function setMode(m) {
-  mode=m;
-  document.getElementById('btnRatio').className='mode-btn'+(m==='ratio'?' active':'');
-  document.getElementById('btnAbs').className='mode-btn'+(m==='abs'?' active':'');
-  buildChart();
-}
-
-function handleUpload(file, isRatio) {
-  const lbl=document.getElementById(isRatio?'lblRatio':'lblAbs');
-  lbl.textContent='Loading '+file.name+'…';
+document.getElementById('csvInput').addEventListener('change',function(e){
+  const file=e.target.files[0]; if(!file) return;
+  document.getElementById('uploadLabel').textContent='Loading '+file.name+'...';
   const reader=new FileReader();
   reader.onload=ev=>{
     const newData=parseCSV(ev.target.result);
-    if(isRatio) dataRatio=mergeData(dataRatio,newData);
-    else dataAbs=mergeData(dataAbs,newData);
+    currentData=mergeData(currentData,newData);
     buildToggles(); buildChart();
     const days=Object.keys(newData).sort();
-    lbl.textContent=file.name+' — merged (temporarily)';
-    document.getElementById('statusMsg').textContent=days.length+' day(s) added: '+days[0]+' → '+days[days.length-1]+'  (browser only — not saved)';
-    document.getElementById('statusMsg').style.color='#27AE60';
+    document.getElementById('uploadLabel').textContent=file.name+' — merged';
+    document.getElementById('statusMsg').textContent=days.length+' day(s) merged: '+days[0]+' → '+days[days.length-1];
+    document.getElementById('lastUpdated').textContent=new Date().toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'})+' — '+file.name;
   };
   reader.readAsText(file);
-}
+});
 
-document.getElementById('csvRatio').addEventListener('change',e=>{ if(e.target.files[0]) handleUpload(e.target.files[0],true); });
-document.getElementById('csvAbs').addEventListener('change',e=>{ if(e.target.files[0]) handleUpload(e.target.files[0],false); });
-
-loadInitialData();
+buildToggles();
+buildChart();
 </script>
 </body>
 </html>
