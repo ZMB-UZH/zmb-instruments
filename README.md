@@ -25,8 +25,7 @@ This repo is the **operational, user-facing** side of ZMB tooling — status pag
 
 **What does not go here:**
 - User booking data, names, or personal identifiers
-- Internal financial information
-- Anything pulled from the KB curated layer in a way that would couple this repo to that pipeline
+
 
 ## How each instrument folder is organised
 
@@ -52,13 +51,6 @@ See `fv4000/README.md` for a complete example.
 5. Add an entry to the table above
 6. Commit and push — GitHub Pages serves the new page automatically at `https://zmb-uzh.github.io/zmb-instruments/<instrument-name>/`
 
-## Embedding in the ZMB website
-
-Pages here are designed to be embeddable via iframe on the ZMB Magnolia instrument pages:
-
-```html
-<iframe src="https://zmb-uzh.github.io/zmb-instruments/fv4000/" width="100%" height="600px" frameborder="0"></iframe>
-```
 
 ## License
 
