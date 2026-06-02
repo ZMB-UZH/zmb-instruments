@@ -2,6 +2,10 @@
 # Raw CSV exports from instrument software stay local, not on GitHub
 **/raw/
 
+# Internal staff SOPs / local-only notes — contain internal Z: paths, never publish
+**/STAFF_UPDATE.md
+*.local.md
+
 # Python
 __pycache__/
 *.pyc
