@@ -5,6 +5,8 @@
 # Internal staff SOPs / local-only notes — contain internal Z: paths, never publish
 **/STAFF_UPDATE.md
 *.local.md
+# Internal handover / session history (Magnolia/Dozuki/internal paths) — never publish
+/_handovers/
 
 # Python
 __pycache__/
