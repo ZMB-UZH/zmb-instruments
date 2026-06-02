@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>FV4000 Laser Power Tracker</title>
+<title>CLSM - Evident Fluoview 4000 (Irchel) — Laser Power Tracker</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
 <style>
@@ -34,8 +34,9 @@ h1{font-size:18px;font-weight:500;margin-bottom:4px}
 </head>
 <body>
 <div class="card">
-  <h1>FV4000 Laser Power Tracker — Irchel</h1>
-  <p class="subtitle">Daily mean per laser line. Toggle between % of nominal and absolute counts. Upload new CSV exports to temporarily extend the timeline in your browser.</p>
+  <h1>CLSM - Evident Fluoview 4000 (Irchel) — Laser Power Tracker</h1>
+  <p class="subtitle" style="margin-bottom:6px">Center for Microscopy and Image Analysis, University of Zurich</p>
+  <p class="subtitle">Per measurement session — median per laser line (a new session starts after a &gt;30-min gap). Toggle between % of nominal and absolute counts. Upload new CSV exports to temporarily extend the timeline in your browser.</p>
 
   <div style="display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap">
     <label class="upload-zone" for="csvRatio" style="flex:1;min-width:220px">
@@ -54,6 +55,12 @@ h1{font-size:18px;font-weight:500;margin-bottom:4px}
     <button class="mode-btn active" id="btnRatio" onclick="setMode('ratio')">% of nominal</button>
     <button class="mode-btn" id="btnAbs" onclick="setMode('abs')">Absolute counts</button>
     <div class="sep"></div>
+    <span style="font-size:12px;color:#888">Range</span>
+    <button class="mode-btn" data-range="1m" onclick="setRange('1m')">1M</button>
+    <button class="mode-btn" data-range="3m" onclick="setRange('3m')">3M</button>
+    <button class="mode-btn" data-range="6m" onclick="setRange('6m')">6M</button>
+    <button class="mode-btn active" data-range="all" onclick="setRange('all')">All</button>
+    <div class="sep"></div>
     <div id="toggleRow" style="display:flex;flex-wrap:wrap;gap:6px"></div>
   </div>
 
@@ -69,7 +76,7 @@ h1{font-size:18px;font-weight:500;margin-bottom:4px}
   </div>
 
   <div class="status" id="statusMsg"></div>
-  <div class="footer">FV4000 Laser Power Monitor log &nbsp;·&nbsp; Irchel Core Facility &nbsp;·&nbsp; Last updated: <span id="lastUpdated">loading…</span></div>
+  <div class="footer">CLSM - Evident Fluoview 4000 (Irchel) — Laser Power Monitor log &nbsp;·&nbsp; Center for Microscopy and Image Analysis, University of Zurich &nbsp;·&nbsp; Last updated: <span id="lastUpdated">loading…</span></div>
 </div>
 
 <script>
@@ -88,6 +95,7 @@ const LASERS=[
 let dataRatio = {};
 let dataAbs = {};
 let mode = 'ratio';
+let rangeMode = 'all';   // 'all' | '1m' | '3m' | '6m' — visible time window
 let activeKeys = new Set(LASERS.map(l=>l.key));
 let chart = null;
 
@@ -110,26 +118,51 @@ async function loadInitialData() {
   buildChart();
 }
 
+const SESSION_GAP_MS = 30*60*1000;  // keep in sync with update_data.py SESSION_GAP_MINUTES
+
+function median(a){ if(!a.length) return null; const s=[...a].sort((x,y)=>x-y); const m=s.length>>1; return s.length%2?s[m]:(s[m-1]+s[m])/2; }
+
+function parseRowDate(raw){
+  // "YYYY/MM/DD HH:MM:SS", "YYYY-MM-DD ...", or "DD.MM.YYYY ..." -> local Date
+  raw=String(raw||'').trim(); if(!raw) return null;
+  const parts=raw.split(/[ T]/), dp=parts[0], tp=parts[1]||'00:00:00';
+  let y,mo,da;
+  if(dp.includes('/')){const p=dp.split('/');y=p[0];mo=p[1];da=p[2];}
+  else if(dp.includes('.')){const p=dp.split('.');da=p[0];mo=p[1];y=p[2];}
+  else if(dp.includes('-')){const p=dp.split('-');y=p[0];mo=p[1];da=p[2];}
+  else return null;
+  const t=tp.length<=5?tp+':00':tp;
+  const d=new Date(`${y}-${String(mo).padStart(2,'0')}-${String(da).padStart(2,'0')}T${t}`);
+  return isNaN(d)?null:d;
+}
+
+function isoKey(d){const p=n=>String(n).padStart(2,'0');return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;}
+
+// Per measurement session (mirrors update_data.py): pool readings, split on a
+// >30-min gap, take the per-laser median of each session.
 function parseCSV(text) {
-  const result = Papa.parse(text.trim(),{header:true,skipEmptyLines:true,dynamicTyping:true});
-  const byDay={};
+  const result = Papa.parse(text.trim(),{header:true,skipEmptyLines:true,dynamicTyping:false});
+  const reads=[];
   result.data.forEach(row=>{
-    const raw=String(row['Date']||row['date']||'').trim(); if(!raw) return;
-    const dp=raw.split(' ')[0];
-    let d;
-    if(dp.includes('/')) { const p=dp.split('/'); d=`${p[0]}-${p[1].padStart(2,'0')}-${p[2].padStart(2,'0')}`; }
-    else if(dp.includes('.')) { const [dd,mm,yyyy]=dp.split('.'); d=`${yyyy}-${mm.padStart(2,'0')}-${dd.padStart(2,'0')}`; }
-    else { d=dp; }
-    if(!byDay[d]) byDay[d]={sums:{},counts:{}};
-    LASERS.forEach(({key})=>{
-      const v=parseFloat(row[key]);
-      if(!isNaN(v)&&v>0){ byDay[d].sums[key]=(byDay[d].sums[key]||0)+v; byDay[d].counts[key]=(byDay[d].counts[key]||0)+1; }
-    });
+    const t=parseRowDate(row['Date']||row['date']); if(!t) return;
+    const vals={};
+    LASERS.forEach(({key})=>{ const v=parseFloat(row[key]); if(!isNaN(v)&&v>0) vals[key]=v; });
+    if(Object.keys(vals).length) reads.push({t,vals});
+  });
+  reads.sort((a,b)=>a.t-b.t);
+  const sessions=[];
+  reads.forEach(r=>{
+    const last=sessions[sessions.length-1];
+    if(!last || (r.t-last[last.length-1].t)>SESSION_GAP_MS) sessions.push([r]);
+    else last.push(r);
   });
   const out={};
-  Object.keys(byDay).sort().forEach(d=>{
-    out[d]={};
-    LASERS.forEach(({key})=>{ const c=byDay[d].counts[key]||0; out[d][key]=c>0?parseFloat((byDay[d].sums[key]/c).toFixed(1)):null; });
+  sessions.forEach(sess=>{
+    const key=isoKey(sess[0].t); out[key]={};
+    LASERS.forEach(({key:lk})=>{
+      const vs=sess.map(r=>r.vals[lk]).filter(v=>v!=null);
+      out[key][lk]=vs.length?parseFloat(median(vs).toFixed(1)):null;
+    });
   });
   return out;
 }
@@ -155,20 +188,36 @@ function getYConfig() {
 
 function buildChart() {
   const data=getActiveData();
-  const days=Object.keys(data).sort();
-  if (!days.length) {
+  // Keys are per-session timestamps ("YYYY-MM-DDTHH:MM:SS"); sort chronologically.
+  const allKeys=Object.keys(data).sort();
+  // Apply the selected time window (anchored to the most recent session date).
+  let keys=allKeys;
+  if (rangeMode!=='all' && allKeys.length) {
+    const days={'1m':31,'3m':92,'6m':183}[rangeMode]||0;
+    const maxD=new Date(allKeys[allKeys.length-1].slice(0,10)+'T00:00:00');
+    const cut=new Date(maxD); cut.setDate(cut.getDate()-days);
+    const pad=n=>String(n).padStart(2,'0');
+    const cutStr=cut.getFullYear()+'-'+pad(cut.getMonth()+1)+'-'+pad(cut.getDate());
+    keys=allKeys.filter(k=>k.slice(0,10)>=cutStr);
+  }
+  if (!keys.length) {
     if (chart) { chart.destroy(); chart=null; }
     return;
   }
-  const labels=days.map(d=>d.slice(5));
+  const dateOf  = k => k.slice(0,10);                                   // date part of a session key
+  const fmtLabel= k => k.length>10 ? k.slice(5,16).replace('T',' ') : k.slice(5);  // "MM-DD HH:MM"
+  const fmtFull = k => k.replace('T',' ');                             // tooltip title
+  const firstIdx= d => keys.findIndex(k=>dateOf(k)===d);               // first session on a date
+  const lastIdx = d => { for(let i=keys.length-1;i>=0;i--) if(dateOf(keys[i])===d) return i; return -1; };
+  const labels=keys.map(fmtLabel);
   const yc=getYConfig();
   const keyDates=['2026-05-20','2026-05-22','2026-05-25','2026-05-26','2026-05-27'];
 
   const bgPlugin={id:'bgZ',beforeDatasetsDraw(ch){
     const{ctx,chartArea:{left,right,top,bottom},scales:{x}}=ch; ctx.save();
-    [{d:'2026-05-20',d2:'2026-05-20',c:'rgba(255,235,150,0.45)'},{d:'2026-05-22',d2:'2026-05-26',c:'rgba(220,50,50,0.13)'},{d:'2026-05-27',d2:days[days.length-1],c:'rgba(80,180,80,0.10)'}]
+    [{d:'2026-05-20',d2:'2026-05-20',c:'rgba(255,235,150,0.45)'},{d:'2026-05-22',d2:'2026-05-26',c:'rgba(220,50,50,0.13)'},{d:'2026-05-27',d2:dateOf(keys[keys.length-1]),c:'rgba(80,180,80,0.10)'}]
     .forEach(({d,d2,c})=>{
-      const i1=days.indexOf(d),i2=days.indexOf(d2); if(i1<0) return;
+      const i1=firstIdx(d),i2=lastIdx(d2); if(i1<0) return;
       const x1=Math.max(left,x.getPixelForValue(i1)-12),x2=Math.min(right,x.getPixelForValue(i2<0?i1:i2)+12);
       ctx.fillStyle=c; ctx.fillRect(x1,top,x2-x1,bottom-top);
     }); ctx.restore();
@@ -178,7 +227,7 @@ function buildChart() {
     const{ctx,chartArea:{top,bottom},scales:{x}}=ch;
     [{d:'2026-05-20',label:'20 May\n1st align',c:'#B8860B'},{d:'2026-05-27',label:'27 May\nfix',c:'#2E7D32'}]
     .forEach(({d,label,c})=>{
-      const i=days.indexOf(d); if(i<0) return;
+      const i=firstIdx(d); if(i<0) return;
       const xp=x.getPixelForValue(i); ctx.save();
       ctx.strokeStyle=c; ctx.lineWidth=1.2; ctx.setLineDash([3,3]);
       ctx.beginPath(); ctx.moveTo(xp,top); ctx.lineTo(xp,bottom); ctx.stroke();
@@ -187,30 +236,44 @@ function buildChart() {
     });
   }};
 
+  // Vertical crosshair at the hovered session (pairs with the index-mode tooltip).
+  const crosshairPlugin={id:'crosshair',afterDraw(ch){
+    const t=ch.tooltip;
+    if(t && t._active && t._active.length){
+      const x=t._active[0].element.x, {top,bottom}=ch.chartArea;
+      ch.ctx.save(); ch.ctx.beginPath(); ch.ctx.moveTo(x,top); ch.ctx.lineTo(x,bottom);
+      ch.ctx.lineWidth=1; ch.ctx.strokeStyle='rgba(0,0,0,0.28)'; ch.ctx.setLineDash([4,3]); ch.ctx.stroke(); ch.ctx.restore();
+    }
+  }};
+
   const datasets=LASERS.filter(l=>activeKeys.has(l.key)).map(l=>({
     label:l.key+' nm',
-    data:days.map(d=>{ const v=data[d]?.[l.key]; return v!=null?parseFloat(v.toFixed(1)):null; }),
+    data:keys.map(k=>{ const v=data[k]?.[l.key]; return v!=null?parseFloat(v.toFixed(1)):null; }),
     borderColor:l.color, backgroundColor:l.color+'18', borderWidth:1.8, borderDash:l.dash,
-    pointRadius:days.map(d=>keyDates.includes(d)?5:2),
-    pointBackgroundColor:days.map(d=>keyDates.includes(d)?(d==='2026-05-27'?'#27AE60':d==='2026-05-20'?'#D4A000':'#C0392B'):l.color),
+    pointRadius:keys.map(k=>keyDates.includes(dateOf(k))?5:2),
+    pointBackgroundColor:keys.map(k=>keyDates.includes(dateOf(k))?(dateOf(k)==='2026-05-27'?'#27AE60':dateOf(k)==='2026-05-20'?'#D4A000':'#C0392B'):l.color),
     tension:0.3, spanGaps:true,
   }));
 
   if(chart) chart.destroy();
   chart=new Chart(document.getElementById('laserChart'),{
-    type:'line', plugins:[bgPlugin,annotPlugin],
+    type:'line', plugins:[bgPlugin,annotPlugin,crosshairPlugin],
     data:{labels,datasets},
     options:{
       responsive:true, maintainAspectRatio:false,
+      interaction:{mode:'index',intersect:false},
       plugins:{
         legend:{display:false},
-        tooltip:{callbacks:{
-          title:ctx=>days[ctx[0].dataIndex],
-          label:ctx=>`${ctx.dataset.label}: ${ctx.parsed.y!=null?ctx.parsed.y.toFixed(1)+(mode==='ratio'?' %':' counts'):'n/a'}`
-        }}
+        tooltip:{
+          mode:'index', intersect:false,
+          callbacks:{
+            title:ctx=>fmtFull(keys[ctx[0].dataIndex]),
+            label:ctx=>`${ctx.dataset.label}: ${ctx.parsed.y!=null?ctx.parsed.y.toFixed(1)+(mode==='ratio'?' %':' counts'):'n/a'}`
+          }
+        }
       },
       scales:{
-        x:{ticks:{maxTicksLimit:14,maxRotation:45,font:{size:10}},grid:{color:'rgba(0,0,0,0.05)'}},
+        x:{ticks:{maxTicksLimit:14,minRotation:45,maxRotation:45,font:{size:10}},grid:{color:'rgba(0,0,0,0.05)'}},
         y:{min:yc.min,max:yc.max,title:{display:true,text:yc.title,font:{size:11}},grid:{color:'rgba(0,0,0,0.05)'},ticks:{font:{size:10}}}
       }
     }
@@ -240,6 +303,14 @@ function setMode(m) {
   buildChart();
 }
 
+function setRange(r) {
+  rangeMode=r;
+  document.querySelectorAll('[data-range]').forEach(b=>{
+    b.className='mode-btn'+(b.dataset.range===r?' active':'');
+  });
+  buildChart();
+}
+
 function handleUpload(file, isRatio) {
   const lbl=document.getElementById(isRatio?'lblRatio':'lblAbs');
   lbl.textContent='Loading '+file.name+'…';
@@ -249,9 +320,9 @@ function handleUpload(file, isRatio) {
     if(isRatio) dataRatio=mergeData(dataRatio,newData);
     else dataAbs=mergeData(dataAbs,newData);
     buildToggles(); buildChart();
-    const days=Object.keys(newData).sort();
+    const sk=Object.keys(newData).sort();
     lbl.textContent=file.name+' — merged (temporarily)';
-    document.getElementById('statusMsg').textContent=days.length+' day(s) added: '+days[0]+' → '+days[days.length-1]+'  (browser only — not saved)';
+    document.getElementById('statusMsg').textContent=sk.length+' session(s) added: '+sk[0].replace('T',' ')+' → '+sk[sk.length-1].replace('T',' ')+'  (browser only — not saved)';
     document.getElementById('statusMsg').style.color='#27AE60';
   };
   reader.readAsText(file);

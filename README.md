@@ -10,7 +10,7 @@ This repository hosts lightweight HTML status pages for individual instruments a
 
 | Instrument | Page | Description |
 |---|---|---|
-| Evident FluoView FV4000 (Irchel) | [fv4000/](fv4000/) | Laser power monitor (LPM) tracker — daily mean power per laser line over time, with incident annotations |
+| CLSM - Evident Fluoview 4000 (Irchel) | [fv4000/](fv4000/) | Laser power monitor (LPM) tracker — per-session power per laser line over time, with incident annotations |
 
 More instruments will be added as the need arises.
 
