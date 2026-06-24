@@ -261,6 +261,19 @@ def main() -> int:
     with DATA_JSON.open("w", encoding="utf-8") as f:
         json.dump(data, f, indent=2, sort_keys=False)
     print(f"\nWritten to {DATA_JSON.relative_to(SCRIPT_DIR.parent)}")
+
+    latest_date = None
+    for mode in ("ratio", "abs"):
+        keys = sorted(data.get(mode, {}).keys())
+        if keys:
+            candidate = keys[-1][:10]  # YYYY-MM-DD from ISO timestamp
+            if latest_date is None or candidate > latest_date:
+                latest_date = candidate
+    date_str = latest_date or data.get("updated", "YYYY-MM-DD")
+    print("\nNext step - commit and push:")
+    print("  git add fv4000/data.json")
+    print(f'  git commit -m "Update FV4000 data - {date_str}"')
+    print("  git push")
     return 0
 
 

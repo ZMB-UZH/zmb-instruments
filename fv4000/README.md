@@ -27,10 +27,10 @@ The FV4000 software logs many readings per laser per day (during warm-up and acr
    python update_data.py
    ```
    Add `--dry-run` to preview without writing, `--verbose` for per-file detail. The script scans every CSV under `raw/`, pools the readings, and rebuilds the sessions.
-5. Reload the local page to check it looks right (see *Viewing* below), then commit and push **only** `data.json`:
+5. Reload the local page to check it looks right (see *Viewing* below), then commit and push **only** `data.json`. The script prints the exact command to run — copy it from the last lines of its output:
    ```
-   git add data.json
-   git commit -m "Update FV4000 data — YYYY-MM-DD"
+   git add fv4000/data.json
+   git commit -m "Update FV4000 data - 2026-06-23"   ← date filled in by the script
    git push
    ```
    GitHub Pages updates within a minute.
