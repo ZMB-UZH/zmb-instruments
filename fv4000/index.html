@@ -73,6 +73,8 @@ h1{font-size:18px;font-weight:500;margin-bottom:4px}
     <div class="legend-item"><span class="swatch" style="background:#FFF2CC;border:0.5px solid #B8860B"></span>First realignment 20 May 2026 (partial)</div>
     <div class="legend-item"><span class="swatch" style="background:#FFE0E0;border:0.5px solid #C0392B"></span>Critical drop — LPM out of range</div>
     <div class="legend-item"><span class="swatch" style="background:#E2EFDA;border:0.5px solid #27AE60"></span>Recovery from 27 May 2026</div>
+    <div class="legend-item"><span style="color:#D97706;font-weight:700;font-size:13px;line-height:1">▼</span>&nbsp;&gt;10% drop from prior session</div>
+    <div class="legend-item"><span style="color:#C0392B;font-weight:700;font-size:13px;line-height:1">▼</span>&nbsp;&gt;20% drop from prior session</div>
   </div>
 
   <div class="status" id="statusMsg"></div>
@@ -92,12 +94,34 @@ const LASERS=[
   {key:'785',color:'#6B7280',dash:[]},
 ];
 
+const DROP_THRESHOLD = 10; // flag a session-over-session relative drop of >= this %
+
 let dataRatio = {};
 let dataAbs = {};
 let mode = 'ratio';
 let rangeMode = 'all';   // 'all' | '1m' | '3m' | '6m' — visible time window
 let activeKeys = new Set(LASERS.map(l=>l.key));
 let chart = null;
+
+function computeDeltas(keys, data) {
+  // Returns {laserKey: Array<number|null>} — relative % change from the preceding
+  // session that had a value for that laser. null = no prior value to compare.
+  const result = {};
+  LASERS.forEach(({key: lk}) => {
+    const arr = new Array(keys.length).fill(null);
+    let prevVal = null;
+    keys.forEach((k, i) => {
+      const raw = data[k]?.[lk];
+      const v = (raw != null) ? parseFloat(raw) : null;
+      if (v != null) {
+        if (prevVal != null && prevVal !== 0) arr[i] = ((v - prevVal) / prevVal) * 100;
+        prevVal = v;
+      }
+    });
+    result[lk] = arr;
+  });
+  return result;
+}
 
 async function loadInitialData() {
   try {
@@ -246,6 +270,23 @@ function buildChart() {
     }
   }};
 
+  const deltas = computeDeltas(keys, data);
+
+  const dropPlugin={id:'dropMarkers',afterDatasetsDraw(ch){
+    const{ctx}=ch;
+    ch.data.datasets.forEach((ds,di)=>{
+      const lk=ds.label.split(' ')[0];
+      const meta=ch.getDatasetMeta(di);
+      meta.data.forEach((pt,i)=>{
+        const d=deltas[lk]?.[i];
+        if(d==null || d>-DROP_THRESHOLD) return;
+        const color=d<-20?'#C0392B':'#D97706';
+        ctx.save(); ctx.fillStyle=color; ctx.font='bold 11px -apple-system,sans-serif'; ctx.textAlign='center';
+        ctx.fillText('▼',pt.x,pt.y+16); ctx.restore();
+      });
+    });
+  }};
+
   const datasets=LASERS.filter(l=>activeKeys.has(l.key)).map(l=>({
     label:l.key+' nm',
     data:keys.map(k=>{ const v=data[k]?.[l.key]; return v!=null?parseFloat(v.toFixed(1)):null; }),
@@ -257,7 +298,7 @@ function buildChart() {
 
   if(chart) chart.destroy();
   chart=new Chart(document.getElementById('laserChart'),{
-    type:'line', plugins:[bgPlugin,annotPlugin,crosshairPlugin],
+    type:'line', plugins:[bgPlugin,annotPlugin,crosshairPlugin,dropPlugin],
     data:{labels,datasets},
     options:{
       responsive:true, maintainAspectRatio:false,
@@ -268,7 +309,14 @@ function buildChart() {
           mode:'index', intersect:false,
           callbacks:{
             title:ctx=>fmtFull(keys[ctx[0].dataIndex]),
-            label:ctx=>`${ctx.dataset.label}: ${ctx.parsed.y!=null?ctx.parsed.y.toFixed(1)+(mode==='ratio'?' %':' counts'):'n/a'}`
+            label:ctx=>{
+              const v=ctx.parsed.y; const lk=ctx.dataset.label.split(' ')[0];
+              const d=deltas[lk]?.[ctx.dataIndex];
+              const unit=mode==='ratio'?' %':' counts';
+              let text=`${ctx.dataset.label}: ${v!=null?v.toFixed(1)+unit:'n/a'}`;
+              if(d!=null){const sign=d>=0?'+':''; const arrow=d<=-DROP_THRESHOLD?' ▼':''; text+=`   ${sign}${d.toFixed(1)}%${arrow}`;}
+              return text;
+            }
           }
         }
       },
