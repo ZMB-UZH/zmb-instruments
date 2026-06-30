@@ -208,8 +208,8 @@ def main() -> int:
 
     csv_files = sorted(RAW_DIR.rglob("*.csv"))
     if not csv_files:
-        print(f"No CSV files found under {RAW_DIR}")
-        return 1
+        print(f"No CSV files found under {RAW_DIR} — nothing to process.")
+        return 2
 
     print(f"Found {len(csv_files)} CSV file(s) under raw/\n")
 
@@ -254,6 +254,10 @@ def main() -> int:
     print(f"Summary: {total_added} session(s) added, {total_updated} updated")
     print(f"data.json now contains {len(data['ratio'])} ratio session(s), {len(data['abs'])} abs session(s)")
 
+    if total_added == 0:
+        print("No new sessions — nothing to publish.")
+        return 2
+
     if args.dry_run:
         print("\n[dry-run] No changes written.")
         return 0
@@ -270,6 +274,7 @@ def main() -> int:
             if latest_date is None or candidate > latest_date:
                 latest_date = candidate
     date_str = latest_date or data.get("updated", "YYYY-MM-DD")
+    (SCRIPT_DIR / ".qc_last_date").write_text(date_str, encoding="utf-8")
     print("\nNext step - commit and push:")
     print("  git add fv4000/data.json")
     print(f'  git commit -m "Update FV4000 data - {date_str}"')

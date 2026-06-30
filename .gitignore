@@ -8,6 +8,12 @@
 # Internal handover / session history (Magnolia/Dozuki/internal paths) — never publish
 /_handovers/
 
+# QC run sidecar (measurement date written by update_data.py, read by bat)
+**/.qc_last_date
+
+# QC update log (local audit trail, never published)
+/logs/
+
 # Python
 __pycache__/
 *.pyc
